@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:cine_topia/app/ui/components/movie_card.dart';
 import 'package:cine_topia/app/viewmodels/search_movies_viewmodel.dart';
 import 'package:cine_topia/app/ui/widgets/base_view.dart';
@@ -15,6 +16,8 @@ class SearchMovies extends BaseView<SearchMoviesViewModel> {
 class _SearchMoviesState extends BaseViewState<SearchMoviesViewModel, SearchMovies> {
   final TextEditingController _searchController = TextEditingController();
   final INavigationService _navigationService = ServiceLocator().get<INavigationService>();
+  Timer? _debounceTimer;
+  bool _isTyping = false;
 
   @override
   SearchMoviesViewModel createViewModel() {
@@ -33,6 +36,7 @@ class _SearchMoviesState extends BaseViewState<SearchMoviesViewModel, SearchMovi
   @override
   void dispose() {
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -41,9 +45,27 @@ class _SearchMoviesState extends BaseViewState<SearchMoviesViewModel, SearchMovi
     viewModel.refresh();
   }
 
-  /// Atualiza a busca com base no texto digitado
+  /// Atualiza a busca com debounce para evitar travamento
   void _onSearchChanged(String query) {
-    viewModel.searchMovies(query);
+    setState(() {
+      _isTyping = true;
+    });
+    
+    // Cancela o timer anterior
+    _debounceTimer?.cancel();
+    
+    // Cria novo timer com delay de 500ms
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      setState(() {
+        _isTyping = false;
+      });
+      
+      if (query.trim().isEmpty) {
+        viewModel.loadPopularMovies();
+      } else {
+        viewModel.searchMovies(query);
+      }
+    });
   }
 
   @override
@@ -62,7 +84,19 @@ class _SearchMoviesState extends BaseViewState<SearchMoviesViewModel, SearchMovi
               decoration: InputDecoration(
                 hintText: 'Buscar filmes...',
                 hintStyle: const TextStyle(color: Colors.white54),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                prefixIcon: _isTyping 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB370FF)),
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.search, color: Colors.white54),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, color: Colors.white54),
